@@ -343,6 +343,8 @@ export default function App() {
   const [now, setNow] = useState(new Date());
   const [role, setRole] = useState("admin");
   const [meId, setMeId] = useState(null);
+  const [authRole, setAuthRole] = useState(null); // null = not chosen yet, "admin" or "employee"
+const [employeeSession, setEmployeeSession] = useState(null);
   const [saveState, setSaveState] = useState("idle");
 
   useEffect(() => {
@@ -433,7 +435,27 @@ export default function App() {
       </div>
     );
   }
+if (!authRole) {
+    return (
+      <div style={{ minHeight: "100vh", background: COLORS.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT_DISPLAY }}>
+        <div style={{ background: "#fff", borderRadius: 16, padding: 32, maxWidth: 360, width: "100%", textAlign: "center", boxShadow: "0 1px 3px rgba(27,30,54,0.08)" }}>
+          <div style={{ marginBottom: 20 }}><LogoMark /></div>
+          <h2 style={{ margin: "0 0 20px" }}>Welcome</h2>
+          <button onClick={() => setAuthRole("admin")} style={{ ...primaryBtn, width: "100%", justifyContent: "center", marginBottom: 10 }}>
+            HR Admin Login
+          </button>
+          <button onClick={() => setAuthRole("employee")} style={{ ...secondaryBtn, width: "100%", justifyContent: "center" }}>
+            Employee Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
+  if (authRole === "employee" && !employeeSession) {
+    return <LoginFlow onLogin={(emp) => setEmployeeSession(emp)} />;
+  }
+  
   return (
     <div style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif", background: COLORS.bg, minHeight: "100vh", color: COLORS.ink }}>
       <Shell
