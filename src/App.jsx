@@ -33,6 +33,9 @@ const COLORS = {
 
 const DEPARTMENTS = ["Human Resources", "Engineering", "Design", "Sales", "Marketing", "Operations", "Finance"];
 
+const FONT_DISPLAY = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const FONT_MONO = "'SFMono-Regular', 'Roboto Mono', Consolas, 'Courier New', monospace";
+
 /* ---------------- Supabase config ----------------
    Fill these in after running supabase_schema.sql in your Supabase project
    (Project Settings → API → Project URL / anon public key)
