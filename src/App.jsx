@@ -49,7 +49,7 @@ function uid(prefix) {
 }
 
 async function checkFirstLogin(zkUserId) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?zk_user_id=eq.${zkUserId}&select=name,password,email`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?zk_user_id=eq.${zkUserId}&select=id,name,password,email`, {
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
   });
   const data = await res.json();
@@ -64,7 +64,7 @@ async function loginEmployee(zkUserId, email, password) {
   });
   const data = await res.json();
   if (!data.length || data[0].password !== password) throw new Error('Invalid credentials');
-  return { zk_user_id: zkUserId, name: data[0].name, email: data[0].email, role: 'employee' };
+  return { id: data[0].id, zk_user_id: zkUserId, name: data[0].name, email: data[0].email, role: 'employee' };
 }
 const LEAVE_TYPES = [
   { code: "CL", label: "Casual Leave (CL)" },
@@ -88,7 +88,7 @@ function EmployeePortal({ employee, onLogout }) {
   async function loadToday() {
     setLoadingRec(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/attendance?employee_id=eq.${employee.zk_user_id}&date=eq.${today}`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/attendance?employee_id=eq.${employee.id}&date=eq.${today}`, {
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
       });
       const data = await res.json();
@@ -111,9 +111,9 @@ function EmployeePortal({ employee, onLogout }) {
   async function handlePunch(type) {
     const nowIso = new Date().toISOString();
     const body = type === "check-in"
-      ? { employee_id: employee.zk_user_id, date: today, check_in: nowIso, type: "office", source: "web" }
-      : { employee_id: employee.zk_user_id, date: today, check_out: nowIso, source: "web" };
-    try {
+  ? { employee_id: employee.id, date: today, check_in: nowIso, type: "office", source: "web" }
+: { employee_id: employee.id, date: today, check_out: nowIso, source: "web" };
+      try {
       await fetch(`${SUPABASE_URL}/rest/v1/attendance?on_conflict=employee_id,date`, {
         method: "POST",
         headers: {
