@@ -76,6 +76,25 @@ function daysInMonth(ym) {
 
 const GRACE_MIN = 15;
 const HALFDAY_HOURS = 4.5;
+const MOBILE_BREAKPOINT = 720;
+
+/* Real responsive detection — the previous build used Tailwind-style
+   classNames ("hidden md:flex") with no Tailwind installed in the
+   project, so they silently did nothing. This hook drives layout from
+   actual JS state instead, no CSS framework required. */
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return isMobile;
+}
 
 function computeStatus(emp, rec, isPastDay, nowMinutes) {
   // rec: {checkIn, checkOut, type} type: office|wfh|leave
@@ -301,7 +320,8 @@ export default function App() {
   if (loading) {
     return (
       <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.bg }}>
-        <Loader2 className="animate-spin" color={COLORS.orange} size={32} />
+        <style>{"@keyframes rv-spin { to { transform: rotate(360deg); } }"}</style>
+        <Loader2 style={{ animation: "rv-spin 0.9s linear infinite" }} color={COLORS.orange} size={32} />
       </div>
     );
   }
@@ -334,52 +354,95 @@ export default function App() {
 
 /* ---------------- Shell / Nav ---------------- */
 function Shell({ children, tab, setTab, now, role, setRole, meId, setMeId, employees, saveState }) {
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const isMobile = useIsMobile();
   const items = [
     { id: "today", label: "Today", icon: Building2 },
-    { id: "log", label: "Attendance Log", icon: Calendar },
-    ...(role === "admin" ? [{ id: "employees", label: "Employees", icon: Users }] : []),
+    { id: "log", label: "Log", fullLabel: "Attendance Log", icon: Calendar },
+    ...(role === "admin" ? [{ id: "employees", label: "Team", fullLabel: "Employees", icon: Users }] : []),
     { id: "reports", label: "Reports", icon: BarChart3 },
-    { id: "mycheckin", label: "My Check-In", icon: UserCircle },
+    { id: "mycheckin", label: "Me", fullLabel: "My Check-In", icon: UserCircle },
   ];
 
+  if (isMobile) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+        {/* Mobile top bar: logo + role switch + live clock */}
+        <div style={{
+          position: "sticky", top: 0, zIndex: 40, background: COLORS.navy, color: "#fff",
+          padding: "10px 14px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <LogoMark />
+            <div style={{
+              background: "rgba(255,255,255,0.08)", borderRadius: 8, padding: "5px 10px",
+              fontFamily: FONT_MONO, fontWeight: 700, fontSize: 13, letterSpacing: 0.5,
+            }}>
+              {now.toLocaleTimeString([], { hour12: false })}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 9, padding: 3 }}>
+            {["admin", "employee"].map(r => (
+              <button key={r} onClick={() => setRole(r)} style={{
+                flex: 1, padding: "6px 0", borderRadius: 6, border: "none", cursor: "pointer",
+                background: role === r ? COLORS.orange : "transparent",
+                color: role === r ? "#fff" : "#B9BEDD", fontWeight: 700, fontSize: 12, textTransform: "capitalize",
+              }}>{r === "admin" ? "HR Admin" : "Employee"}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Main content */}
+        <main style={{ flex: 1, minWidth: 0, padding: "16px 14px", paddingBottom: 88 }}>
+          {saveState !== "idle" && (
+            <div style={{ textAlign: "right", fontSize: 11.5, color: COLORS.muted, fontWeight: 600, marginBottom: 8 }}>
+              {saveState === "saving" ? "Saving…" : saveState === "saved" ? "All changes saved" : ""}
+            </div>
+          )}
+          {children}
+        </main>
+
+        {/* Bottom tab bar */}
+        <nav style={{
+          position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40,
+          background: "#fff", borderTop: `1px solid ${COLORS.line}`,
+          display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          boxShadow: "0 -2px 8px rgba(27,36,32,0.06)",
+        }}>
+          {items.map(({ id, label, icon: Icon }) => {
+            const active = tab === id;
+            return (
+              <button key={id} onClick={() => setTab(id)} style={{
+                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                padding: "9px 2px 8px", border: "none", background: "transparent", cursor: "pointer",
+              }}>
+                <Icon size={19} color={active ? COLORS.orange : COLORS.muted} />
+                <span style={{
+                  fontSize: 10.5, fontWeight: active ? 700 : 600,
+                  color: active ? COLORS.orange : COLORS.muted,
+                }}>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+    );
+  }
+
+  // Desktop layout
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      {/* Sidebar - desktop */}
-      <aside className="hidden md:flex" style={{
-        width: 250, background: COLORS.navy, color: "#fff", flexDirection: "column",
-        padding: "22px 16px", flexShrink: 0,
+      <aside style={{
+        width: 240, background: COLORS.navy, color: "#fff", display: "flex", flexDirection: "column",
+        padding: "22px 16px", flexShrink: 0, position: "sticky", top: 0, height: "100vh",
       }}>
         <SidebarInner items={items} tab={tab} setTab={setTab} role={role} setRole={setRole} />
       </aside>
 
-      {/* Mobile top bar */}
-      <div className="md:hidden" style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 40,
-        background: COLORS.navy, color: "#fff", display: "flex", alignItems: "center",
-        justifyContent: "space-between", padding: "12px 16px",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <LogoMark />
+      <main style={{ flex: 1, minWidth: 0, padding: "24px 32px 60px" }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+          <TopBar now={now} saveState={saveState} />
+          {children}
         </div>
-        <button onClick={() => setMobileNavOpen(v => !v)} style={{
-          background: COLORS.orange, color: "#fff", border: "none", borderRadius: 8,
-          padding: "8px 10px", fontWeight: 700,
-        }}>{mobileNavOpen ? <X size={18} /> : <Users size={18} />}</button>
-      </div>
-      {mobileNavOpen && (
-        <div className="md:hidden" style={{
-          position: "fixed", top: 52, left: 0, right: 0, bottom: 0, zIndex: 39,
-          background: COLORS.navy, padding: 16, overflowY: "auto",
-        }}>
-          <SidebarInner items={items} tab={tab} setTab={(t) => { setTab(t); setMobileNavOpen(false); }} role={role} setRole={setRole} />
-        </div>
-      )}
-
-      {/* Main */}
-      <main style={{ flex: 1, minWidth: 0, padding: "24px 20px 60px" }} className="pt-16 md:pt-6">
-        <TopBar now={now} saveState={saveState} />
-        {children}
       </main>
     </div>
   );
@@ -409,15 +472,15 @@ function SidebarInner({ items, tab, setTab, role, setRole }) {
       </div>
 
       <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        {items.map(({ id, label, icon: Icon }) => (
+        {items.map(({ id, label, fullLabel, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)} style={{
             display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 9,
             border: "none", cursor: "pointer", textAlign: "left",
-            background: tab === id ? "rgba(232,115,74,0.16)" : "transparent",
+            background: tab === id ? "rgba(47,102,89,0.18)" : "transparent",
             color: tab === id ? "#fff" : "#B9BEDD", fontWeight: 600, fontSize: 14.5,
           }}>
-            <Icon size={17} color={tab === id ? COLORS.orange : "#8F94BB"} />
-            {label}
+            <Icon size={17} color={tab === id ? COLORS.brass : "#8F94BB"} />
+            {fullLabel || label}
           </button>
         ))}
       </nav>
@@ -443,6 +506,7 @@ function TopBar({ now, saveState }) {
 
 /* ---------------- Today View ---------------- */
 function TodayView({ employees, attendance, now, punch, role }) {
+  const isMobile = useIsMobile();
   const date = todayStr(now);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -474,41 +538,64 @@ function TodayView({ employees, attendance, now, punch, role }) {
         <StatCard label="Absent" value={counts.absent} tone="absent" />
       </div>
 
-      <div style={{ background: COLORS.card, borderRadius: 16, padding: "20px 20px 8px", boxShadow: "0 1px 3px rgba(27,30,54,0.06)" }}>
-        <h3 style={{ margin: "0 0 14px", fontSize: 16.5, fontWeight: 700 }}>Employee status</h3>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
-            <thead>
-              <tr style={{ color: COLORS.muted, fontSize: 12.5, textAlign: "left" }}>
-                <th style={th}>Name</th>
-                <th style={th}>Department</th>
-                <th style={th}>Status</th>
-                <th style={th}>First punch</th>
-                <th style={th}>Last punch</th>
-                {role === "admin" && <th style={th}></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ emp, rec, status }) => (
-                <tr key={emp.id} style={{ borderTop: `1px solid ${COLORS.line}` }}>
-                  <td style={td}><strong>{emp.name}</strong></td>
-                  <td style={{ ...td, color: COLORS.muted }}>{emp.department}</td>
-                  <td style={td}><StatusPill {...status} /></td>
-                  <td style={{ ...td, color: COLORS.muted }}>{fmtTime(rec?.checkIn)}</td>
-                  <td style={{ ...td, color: COLORS.muted }}>{fmtTime(rec?.checkOut)}</td>
-                  {role === "admin" && (
-                    <td style={td}>
-                      <QuickActions emp={emp} rec={rec} punch={punch} />
-                    </td>
-                  )}
+      <div style={{ background: COLORS.card, borderRadius: 14, padding: isMobile ? "16px 14px 6px" : "20px 20px 8px", boxShadow: "0 1px 3px rgba(27,30,54,0.06)" }}>
+        <h3 style={{ margin: "0 0 14px", fontSize: 16.5, fontWeight: 700, fontFamily: FONT_DISPLAY }}>Employee status</h3>
+
+        {rows.length === 0 && (
+          <p style={{ color: COLORS.muted, textAlign: "center", padding: "26px 0" }}>No employees yet. Add some in the Employees tab.</p>
+        )}
+
+        {isMobile ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 10 }}>
+            {rows.map(({ emp, rec, status }) => (
+              <div key={emp.id} style={{ border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14.5 }}>{emp.name}</div>
+                    <div style={{ color: COLORS.muted, fontSize: 12.5 }}>{emp.department}</div>
+                  </div>
+                  <StatusPill {...status} />
+                </div>
+                <div style={{ display: "flex", gap: 16, fontSize: 12.5, color: COLORS.muted, marginBottom: role === "admin" ? 10 : 0 }}>
+                  <span>In: <strong style={{ color: COLORS.ink, fontFamily: FONT_MONO }}>{fmtTime(rec?.checkIn)}</strong></span>
+                  <span>Out: <strong style={{ color: COLORS.ink, fontFamily: FONT_MONO }}>{fmtTime(rec?.checkOut)}</strong></span>
+                </div>
+                {role === "admin" && <QuickActions emp={emp} rec={rec} punch={punch} />}
+              </div>
+            ))}
+          </div>
+        ) : rows.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+              <thead>
+                <tr style={{ color: COLORS.muted, fontSize: 12.5, textAlign: "left" }}>
+                  <th style={th}>Name</th>
+                  <th style={th}>Department</th>
+                  <th style={th}>Status</th>
+                  <th style={th}>First punch</th>
+                  <th style={th}>Last punch</th>
+                  {role === "admin" && <th style={th}></th>}
                 </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr><td colSpan={6} style={{ ...td, color: COLORS.muted, textAlign: "center", padding: "26px 0" }}>No employees yet. Add some in the Employees tab.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map(({ emp, rec, status }) => (
+                  <tr key={emp.id} style={{ borderTop: `1px solid ${COLORS.line}` }}>
+                    <td style={td}><strong>{emp.name}</strong></td>
+                    <td style={{ ...td, color: COLORS.muted }}>{emp.department}</td>
+                    <td style={td}><StatusPill {...status} /></td>
+                    <td style={{ ...td, color: COLORS.muted }}>{fmtTime(rec?.checkIn)}</td>
+                    <td style={{ ...td, color: COLORS.muted }}>{fmtTime(rec?.checkOut)}</td>
+                    {role === "admin" && (
+                      <td style={td}>
+                        <QuickActions emp={emp} rec={rec} punch={punch} />
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -559,6 +646,7 @@ const td = { padding: "12px 12px", fontSize: 14 };
 
 /* ---------------- Attendance Log ---------------- */
 function LogView({ employees, attendance, now }) {
+  const isMobile = useIsMobile();
   const [empFilter, setEmpFilter] = useState("all");
   const [start, setStart] = useState(() => { const d = new Date(now); d.setDate(d.getDate() - 6); return todayStr(d); });
   const [end, setEnd] = useState(todayStr(now));
@@ -588,47 +676,75 @@ function LogView({ employees, attendance, now }) {
 
   return (
     <div>
-      <h1 style={{ fontSize: 26, fontWeight: 800, margin: "0 0 18px" }}>Attendance Log</h1>
+      <h1 style={{ fontSize: isMobile ? 22 : 26, fontWeight: 700, margin: "0 0 16px", fontFamily: FONT_DISPLAY, color: COLORS.ink }}>Attendance Log</h1>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
-        <select value={empFilter} onChange={e => setEmpFilter(e.target.value)} style={selectStyle}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        <select value={empFilter} onChange={e => setEmpFilter(e.target.value)} style={{ ...selectStyle, flex: isMobile ? "1 1 100%" : "unset" }}>
           <option value="all">All employees</option>
           {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
-        <input type="date" value={start} onChange={e => setStart(e.target.value)} style={selectStyle} />
-        <span style={{ alignSelf: "center", color: COLORS.muted }}>to</span>
-        <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={selectStyle} />
+        <input type="date" value={start} onChange={e => setStart(e.target.value)} style={{ ...selectStyle, flex: isMobile ? "1 1 auto" : "unset" }} />
+        <span style={{ alignSelf: "center", color: COLORS.muted, fontSize: 13 }}>to</span>
+        <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={{ ...selectStyle, flex: isMobile ? "1 1 auto" : "unset" }} />
       </div>
 
-      <div style={{ background: COLORS.card, borderRadius: 16, padding: "16px 20px", boxShadow: "0 1px 3px rgba(27,30,54,0.06)", overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700 }}>
-          <thead>
-            <tr style={{ color: COLORS.muted, fontSize: 12.5, textAlign: "left" }}>
-              <th style={th}>Date</th>
-              <th style={th}>Name</th>
-              <th style={th}>Status</th>
-              <th style={th}>Check-in</th>
-              <th style={th}>Check-out</th>
-              <th style={th}>Hours</th>
-            </tr>
-          </thead>
-          <tbody>
+      {rows.length === 0 && (
+        <div style={{ background: COLORS.card, borderRadius: 14, padding: "26px 20px", textAlign: "center", color: COLORS.muted, boxShadow: "0 1px 3px rgba(27,30,54,0.06)" }}>
+          No records for this range.
+        </div>
+      )}
+
+      {isMobile ? (
+        rows.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {rows.map((r, i) => (
-              <tr key={i} style={{ borderTop: `1px solid ${COLORS.line}` }}>
-                <td style={td}>{new Date(r.date + "T00:00:00").toLocaleDateString([], { month: "short", day: "numeric" })}</td>
-                <td style={td}><strong>{r.emp.name}</strong></td>
-                <td style={td}><StatusPill {...r.status} /></td>
-                <td style={{ ...td, color: COLORS.muted }}>{fmtTime(r.rec?.checkIn)}</td>
-                <td style={{ ...td, color: COLORS.muted }}>{fmtTime(r.rec?.checkOut)}</td>
-                <td style={{ ...td, color: COLORS.muted }}>{r.hours != null ? fmtHrs(r.hours) : "—"}</td>
-              </tr>
+              <div key={i} style={{ background: COLORS.card, borderRadius: 10, padding: 12, boxShadow: "0 1px 3px rgba(27,30,54,0.06)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6, gap: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{r.emp.name}</div>
+                    <div style={{ color: COLORS.muted, fontSize: 12, fontFamily: FONT_MONO }}>
+                      {new Date(r.date + "T00:00:00").toLocaleDateString([], { month: "short", day: "numeric" })}
+                    </div>
+                  </div>
+                  <StatusPill {...r.status} />
+                </div>
+                <div style={{ display: "flex", gap: 14, fontSize: 12, color: COLORS.muted }}>
+                  <span>In: <strong style={{ color: COLORS.ink, fontFamily: FONT_MONO }}>{fmtTime(r.rec?.checkIn)}</strong></span>
+                  <span>Out: <strong style={{ color: COLORS.ink, fontFamily: FONT_MONO }}>{fmtTime(r.rec?.checkOut)}</strong></span>
+                  <span>Hrs: <strong style={{ color: COLORS.ink, fontFamily: FONT_MONO }}>{r.hours != null ? fmtHrs(r.hours) : "—"}</strong></span>
+                </div>
+              </div>
             ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={6} style={{ ...td, color: COLORS.muted, textAlign: "center", padding: "26px 0" }}>No records for this range.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        )
+      ) : rows.length > 0 && (
+        <div style={{ background: COLORS.card, borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 3px rgba(27,30,54,0.06)", overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700 }}>
+            <thead>
+              <tr style={{ color: COLORS.muted, fontSize: 12.5, textAlign: "left" }}>
+                <th style={th}>Date</th>
+                <th style={th}>Name</th>
+                <th style={th}>Status</th>
+                <th style={th}>Check-in</th>
+                <th style={th}>Check-out</th>
+                <th style={th}>Hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} style={{ borderTop: `1px solid ${COLORS.line}` }}>
+                  <td style={td}>{new Date(r.date + "T00:00:00").toLocaleDateString([], { month: "short", day: "numeric" })}</td>
+                  <td style={td}><strong>{r.emp.name}</strong></td>
+                  <td style={td}><StatusPill {...r.status} /></td>
+                  <td style={{ ...td, color: COLORS.muted }}>{fmtTime(r.rec?.checkIn)}</td>
+                  <td style={{ ...td, color: COLORS.muted }}>{fmtTime(r.rec?.checkOut)}</td>
+                  <td style={{ ...td, color: COLORS.muted }}>{r.hours != null ? fmtHrs(r.hours) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
