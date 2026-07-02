@@ -65,6 +65,16 @@ async function loginEmployee(zkUserId, email, password) {
   if (!data.length || data[0].password !== password) throw new Error('Invalid credentials');
   return { zk_user_id: zkUserId, name: data[0].name, email: data[0].email, role: 'employee' };
 }
+function LoginFlow({ onLogin }) {
+  const [step, setStep] = React.useState('id');
+  const [zkUserId, setZkUserId] = React.useState('');
+  const [empName, setEmpName] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [confirm, setConfirm] = React.useState('');
+  const [error, setError] = React.useState('');
+}
+
 function todayStr(d = new Date()) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
