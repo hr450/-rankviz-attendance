@@ -47,6 +47,24 @@ const SUPABASE_CONFIGURED = !SUPABASE_URL.includes("YOUR-PROJECT") && !SUPABASE_
 function uid(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
+async function checkFirstLogin(zkUserId) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?zk_user_id=eq.${zkUserId}&select=name,password,email`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+  });
+  const data = await res.json();
+  if (!data.length) throw new Error('Attendance ID not found');
+  const emp = data[0];
+  return { needsSetup: !emp.password, name: emp.name };
+}
+
+async function loginEmployee(zkUserId, email, password) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?zk_user_id=eq.${zkUserId}&email=eq.${email}`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+  });
+  const data = await res.json();
+  if (!data.length || data[0].password !== password) throw new Error('Invalid credentials');
+  return { zk_user_id: zkUserId, name: data[0].name, email: data[0].email, role: 'employee' };
+}
 function todayStr(d = new Date()) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
