@@ -66,7 +66,151 @@ async function loginEmployee(zkUserId, email, password) {
   if (!data.length || data[0].password !== password) throw new Error('Invalid credentials');
   return { zk_user_id: zkUserId, name: data[0].name, email: data[0].email, role: 'employee' };
 }
+const LEAVE_TYPES = [
+  { code: "CL", label: "Casual Leave (CL)" },
+  { code: "AL", label: "Annual Leave (AL)" },
+  { code: "S", label: "Short Leave (S)" },
+  { code: "H", label: "Half Day (H)" },
+  { code: "SL", label: "Sick Leave (SL)" },
+];
 
+function EmployeePortal({ employee, onLogout }) {
+  const [rec, setRec] = React.useState(null);
+  const [loadingRec, setLoadingRec] = React.useState(true);
+  const [leaveType, setLeaveType] = React.useState("CL");
+  const [leaveDate, setLeaveDate] = React.useState("");
+  const [reason, setReason] = React.useState("");
+  const [msg, setMsg] = React.useState("");
+  const [myLeaves, setMyLeaves] = React.useState([]);
+
+  const today = todayStr();
+
+  async function loadToday() {
+    setLoadingRec(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/attendance?employee_id=eq.${employee.zk_user_id}&date=eq.${today}`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+      });
+      const data = await res.json();
+      setRec(data[0] || null);
+    } catch (e) {}
+    setLoadingRec(false);
+  }
+
+  async function loadMyLeaves() {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/leaves?employee_id=eq.${employee.zk_user_id}&order=requested_at.desc&limit=10`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+      });
+      setMyLeaves(await res.json());
+    } catch (e) {}
+  }
+
+  React.useEffect(() => { loadToday(); loadMyLeaves(); }, []);
+
+  async function handlePunch(type) {
+    const nowIso = new Date().toISOString();
+    const body = type === "check-in"
+      ? { employee_id: employee.zk_user_id, date: today, check_in: nowIso, type: "office", source: "web" }
+      : { employee_id: employee.zk_user_id, date: today, check_out: nowIso, source: "web" };
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/attendance?on_conflict=employee_id,date`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json", Prefer: "resolution=merge-duplicates"
+        },
+        body: JSON.stringify([body])
+      });
+      setMsg(type === "check-in" ? "Checked in!" : "Checked out!");
+      loadToday();
+    } catch (e) {
+      setMsg("Something went wrong, try again.");
+    }
+  }
+
+  async function applyLeave() {
+    if (!leaveDate) return setMsg("Pick a date first.");
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/leaves`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify([{ employee_id: employee.zk_user_id, leave_type: leaveType, leave_date: leaveDate, reason }])
+      });
+      setMsg("Leave request submitted!");
+      setLeaveDate(""); setReason("");
+      loadMyLeaves();
+    } catch (e) {
+      setMsg("Could not submit leave request.");
+    }
+  }
+
+  const boxStyle = { maxWidth: 420, margin: "0 auto", padding: "24px 16px", fontFamily: FONT_DISPLAY };
+  const cardStyle = { background: "#fff", borderRadius: 14, padding: 20, marginBottom: 16, boxShadow: "0 1px 3px rgba(27,30,54,0.06)" };
+  const inputStyleLocal = { width: "100%", padding: 10, marginBottom: 10, border: "1px solid #ccc", borderRadius: 8, boxSizing: "border-box" };
+
+  return (
+    <div style={{ minHeight: "100vh", background: COLORS.bg }}>
+      <div style={{ background: COLORS.navy, color: "#fff", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontWeight: 700 }}>{employee.name}</div>
+        <button onClick={onLogout} style={{ background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+          Logout
+        </button>
+      </div>
+
+      <div style={boxStyle}>
+        <div style={cardStyle}>
+          <h3 style={{ margin: "0 0 12px" }}>Today's Attendance</h3>
+          <div style={{ display: "flex", gap: 16, marginBottom: 14, fontSize: 14 }}>
+            <span>In: <strong>{fmtTime(rec?.check_in)}</strong></span>
+            <span>Out: <strong>{fmtTime(rec?.check_out)}</strong></span>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button disabled={!!rec?.check_in} onClick={() => handlePunch("check-in")}
+              style={{ flex: 1, padding: 12, background: rec?.check_in ? "#ccc" : COLORS.green, color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, cursor: rec?.check_in ? "not-allowed" : "pointer" }}>
+              Check In
+            </button>
+            <button disabled={!rec?.check_in || !!rec?.check_out} onClick={() => handlePunch("check-out")}
+              style={{ flex: 1, padding: 12, background: (!rec?.check_in || rec?.check_out) ? "#ccc" : COLORS.red, color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, cursor: (!rec?.check_in || rec?.check_out) ? "not-allowed" : "pointer" }}>
+              Check Out
+            </button>
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <h3 style={{ margin: "0 0 12px" }}>Apply for Leave</h3>
+          <select value={leaveType} onChange={e => setLeaveType(e.target.value)} style={inputStyleLocal}>
+            {LEAVE_TYPES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+          </select>
+          <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} style={inputStyleLocal} />
+          <textarea placeholder="Reason (optional)" value={reason} onChange={e => setReason(e.target.value)} style={{ ...inputStyleLocal, minHeight: 70 }} />
+          <button onClick={applyLeave} style={{ width: "100%", padding: 12, background: COLORS.navy, color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }}>
+            Submit Request
+          </button>
+        </div>
+
+        {msg && <div style={{ textAlign: "center", color: COLORS.navy, fontWeight: 600, marginBottom: 16 }}>{msg}</div>}
+
+        <div style={cardStyle}>
+          <h3 style={{ margin: "0 0 12px" }}>My Recent Leave Requests</h3>
+          {myLeaves.length === 0 && <p style={{ color: COLORS.muted, fontSize: 13 }}>No requests yet.</p>}
+          {myLeaves.map(l => (
+            <div key={l.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: `1px solid ${COLORS.line}`, fontSize: 13.5 }}>
+              <span>{l.leave_type} · {l.leave_date}</span>
+              <span style={{
+                fontWeight: 700,
+                color: l.status === "approved" ? COLORS.green : l.status === "rejected" ? COLORS.red : COLORS.amber
+              }}>{l.status}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 function LoginFlow({ onLogin }) {
   const [step, setStep] = React.useState('id');
   const [zkUserId, setZkUserId] = React.useState('');
@@ -455,7 +599,9 @@ if (!authRole) {
   if (authRole === "employee" && !employeeSession) {
     return <LoginFlow onLogin={(emp) => setEmployeeSession(emp)} />;
   }
-  
+if (authRole === "employee" && employeeSession) {
+    return <EmployeePortal employee={employeeSession} onLogout={() => { setEmployeeSession(null); setAuthRole(null); }} />;
+  }  
   return (
     <div style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif", background: COLORS.bg, minHeight: "100vh", color: COLORS.ink }}>
       <Shell
